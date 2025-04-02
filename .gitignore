@@ -1,0 +1,12 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rbuildignore
+input_data/*
+*DS_Store
+*.RDS
+*.xlsx
+*.docx
+*.pdf
+data/*

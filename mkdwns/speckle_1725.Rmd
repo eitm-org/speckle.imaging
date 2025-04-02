@@ -1,0 +1,227 @@
+---
+title: "1725 Speckle Imaging"
+author: "Abby Coleman"
+date: "`r Sys.Date()`"
+geometry: margin = 2cm
+output: 
+  pdf_document:
+    toc: TRUE
+---
+
+```{r setup, include=FALSE}
+# devtools::install_github("jkaupp/nord")
+# # CRAN version
+# install.packages("nord")
+library(nord)
+library(here)
+library(pander)
+library(ggplot2)
+library(ggbeeswarm)
+library(tidyverse)
+library(paletteer)
+library(wesanderson)
+library(kableExtra)
+library(viridis)
+source(here("functions.R"))
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, fig.align = "center")
+```
+
+```{r read_in_data}
+cell_counts <- readRDS(here("data", "cleaned", "by_nucleus_cell_counts_1725.RDS")) %>%
+  mutate(well = paste0(column, row))
+wells <- readRDS(file = here("data", "cleaned", "by_nucleus_subsamp_1725.RDS"))
+```
+
+# General Conclusions
+
+I used subsampled number of puncta as the dependent variable in my analysis, in accordance with results of the speckle imaging optimization experiments, which concluded this endpoint would be used for speckle imaging going forward.
+
+The plate containing 1725M has a negative Z'factor due to a high variance in the DMSO - R1881 (100% control) condition.
+
+None of the drugs could be modeled with a log logistic curve.
+
+Within each plate, all 1725 compounds exhibited a dose response similar to Enzalutamide.
+
+*1725 M, R, and S exhibited similar dose response.* However, because of the negative Z'factor on the 1725M plate and the compound's high minimum response, results from this compound may not be accurate.
+
+
+# Cell Count
+
+```{r ccplot, fig.width = 6, fig.height = 3, fig.align = "center"}
+ccplot <- ggplot(data = cell_counts, aes(x = exp_id, y = n_cells)) +
+  geom_boxplot(outliers = FALSE) +
+  geom_quasirandom(aes(color = well), size = 1.5, alpha = .5) +
+  theme_bw() +
+  scale_color_viridis_d(guide = "none") +
+  xlab("Treatment Duration (Days)") +
+  ylab("Number of Cells") +
+  ggtitle("Cell Count") +
+  labs(subtitle = "Points are colored by well.") +
+  theme(text=element_text(family="serif"))
+
+ccplot
+
+subsamp_to <- min(cell_counts$n_cells)
+```
+
+The 1725M plate had the lowest distribution of cell count. 
+
+The 1725 R and S plates seem to exhibit some positional differences in cell count.
+
+To calculate subsampled puncta, I randomly subsampled all wells to `r subsamp_to` cells with the slice_sample() function from dplyr_1.1.4.
+
+\newpage
+
+# Z'Factor
+
+```{r zprime_plots, fig.height = 3, fig.width = 3, fig.align = "center", out.width = "50%"}
+for_plot <- wells %>%
+  filter(ctrl != "sample") %>%
+  distinct(filepath, filename, treatment_duration, exp_date, .keep_all = TRUE)
+
+zplot <- ggplot(data = for_plot, aes(x = ctrl, y = zprime)) +
+  geom_boxplot(outliers = FALSE) +
+  geom_quasirandom(aes(color = as.factor(exp_id)), size = 3, alpha = .5) +
+  theme_bw() +
+  scale_color_viridis_d(end = .8) +
+  labs(x = element_blank(),
+       y = "Z'Factor",
+       title = "",
+       color = "Experiment",
+       shape = "Treatment\nDuration") +
+  theme(text=element_text(family="serif"),
+       axis.text.x = element_blank(),
+       axis.ticks.x = element_blank(),
+       axis.title.x = element_blank()) +
+  ylim(c(-1, 1))
+zplot
+```
+
+```{r zfac_tab}
+zfactab <- wells %>%
+  dplyr::select(exp_id, zprime) %>%
+  distinct()
+names(zfactab) <- c("Plate", "Z'Factor")
+kable(zfactab, digits = 2)
+```
+
+1725M has a negative Z'factor, indicating that the separation band between high and low controls is not wide enough.
+
+```{r wells, fig.height = 4, fig.width = 7, out.width = "90%", fig.align = "center"}
+for_plot <- wells
+
+wells_plot <- ggplot(data = for_plot, aes(x = as.factor(ctrl), y = subsamp_puncta, color = factor(round(zprime, 2)))) +
+  facet_grid(cols = vars(exp_id)) +
+  geom_boxplot(outliers = FALSE) +
+  geom_quasirandom(size = 1.5, alpha = .5) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  labs(title = "Z'Factors with Raw Output",
+       y = "Subsampled Number of Puncta",
+       x = "Control",
+       color = "Z'Factor") +
+  scale_color_manual(values= wes_palette("GrandBudapest1", n = 3)) +
+  theme(text=element_text(family="serif"))
+wells_plot
+```
+
+Looking at the raw values, you can see that the relatively high variance in the 1725M plate's high control (DMSO - R1881) condition is what makes this plate's separation band too small to calculate relative puncta effectively.
+
+\newpage
+
+# Plate %CV
+
+
+```{r cv_plots, fig.height = 4, fig.width = 5, fig.align = "center", out.width = "40%"}
+for_plot <- wells %>%
+  # filter(control != "sample") %>%
+  distinct(filepath, filename, treatment_duration, exp_id, .keep_all = TRUE)
+cvplot <- ggplot(data = for_plot, aes(x = ctrl, y = plate_cv)) +
+  geom_boxplot(outliers = FALSE) +
+  geom_quasirandom(aes(color = as.factor(exp_id)), size = 4, alpha = .5) +
+  theme_bw() +
+  scale_color_viridis_d(end = .8) +
+  labs(x = "Control Condition",
+       y = "Plate %CV",
+       title = "Plate %CVs",
+       color = "Experiment",
+       shape = "Treatment\nDuration") +
+  theme(text=element_text(family="serif"))
+cvplot
+```
+
+Plate %CV's are low for all plates.
+
+\newpage
+
+# Dose Response
+
+None of the dose response curves were able to fit a log logistic curve of any parameterization. I will use splines to compare dose response for 1725M, R, and S.
+
+```{r analysis, fig.height = 3, fig.width = 8}
+# for_plot <- wells %>%
+#   filter(ctrl == "sample") %>%
+#   group_by(compound, exp_id, plate_cv, zprime, filename, filepath) %>%
+#   nest() %>%
+#   mutate(n_doses = map_int(data, function(data) length(unique(data$concentration))),
+#          #can this experiment be modelled with a 4parameter log logistic dose response curve?
+#          doesItModel = map_lgl(data, function(data) getDRM(data)))
+# couldn't model with log logistic curve
+
+compound_factor <- c("1725M + R1881", "1725R + R1881", "1725S + R1881", "DMSO + R881", "DMSO - R1881", "Enz + R1881")
+  
+for_plot <- wells %>%
+  mutate(concentration = case_when(ctrl == "high control" ~ max(wells$concentration, na.rm = TRUE),
+                                   ctrl == "low control" ~ min(wells$concentration, na.rm = TRUE),
+                                   TRUE ~ concentration),
+         comp_exp = paste(compound, exp_id),
+         compound = factor(compound, levels = compound_factor),
+         ctrl = factor(ctrl, levels = c("sample", "high control", "low control")))
+# sorter <- for_plot %>% arrange(exp_id, compound)
+# for_plot$comp_exp <- factor(for_plot$comp_exp, levels = unique(sorter$comp_exp))
+# for_plot$ctrl <- factor(for_plot$ctrl, levels = c("sample", "high control", "low control"))
+
+color_map <- for_plot %>%
+  dplyr::select(compound) %>%
+  distinct() %>%
+  arrange(compound)
+color_map["color"] <- paletteer_d("ggthemes::Nuriel_Stone")[1:nrow(color_map)]
+
+comp_comps <- ggplot(data = for_plot, aes(x = concentration, y = puncta_normalized, color = compound)) +
+  facet_grid(cols = vars(exp_id)) +
+  geom_point(alpha = .5, size = 2, aes(shape = ctrl)) +
+  geom_smooth(se = FALSE) +
+  theme_bw() +
+  scale_x_log10() +
+  # scale_color_viridis_d(end = .8) +
+  scale_color_manual(values = color_map$color) +
+  labs(title = "Dose Response by Experiment",
+       color = "Compound",
+       shape = "Control",
+       y = "Subsampled Puncta, Normalized to High and Low Controls (%)",
+       x = "Concentration") +
+  theme(text=element_text(family="serif"))
+comp_comps
+```
+Within each plate, the 1725 compounds respond comparatively with Enzalutamide.
+
+```{r drcs_1725s, fig.height = 4, fig.width = 6}
+forplot <- wells %>%
+  filter(grepl("1725", compound))
+color_map2 <- color_map %>%
+  filter(grepl("1725", compound))
+all1725s <- ggplot(data = forplot, aes(x = concentration, y = puncta_normalized, color = compound)) +
+  geom_point(alpha = .5, size = 3) +
+  geom_smooth(se = FALSE) +
+  theme_bw() +
+  scale_x_log10() +
+  scale_color_manual(values = color_map2$color) +
+  labs(title = "1725 Compounds across Experiments",
+       x = "Concentration",
+       y = "Subsampled Puncta, Normalized to High and Low Controls (%)",
+       color = "Compound") +
+  theme(text=element_text(family="serif"))
+all1725s
+```
+
+The 1725 compounds respond similarly across doses. 1725M has a high minimum response, but this plate also had a negative Z'factor.

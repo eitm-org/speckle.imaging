@@ -1,0 +1,338 @@
+---
+title: "AR siRNA Knockdown"
+author: "Abby Coleman"
+date: "`r Sys.Date()`"
+geometry: margin = 2cm
+output: 
+  pdf_document:
+    toc: TRUE
+---
+
+```{r setup, include=FALSE}
+# devtools::install_github("jkaupp/nord")
+# # CRAN version
+# install.packages("nord")
+library(nord)
+library(here)
+library(pander)
+library(ggplot2)
+library(ggbeeswarm)
+library(tidyverse)
+library(wesanderson)
+library(kableExtra)
+library(viridis)
+source(here("functions.R"))
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+```
+
+```{r read_in_data}
+cell_counts <- readRDS(here("data", "cleaned", "cell_counts.RDS")) %>%
+  mutate(well = paste(row, column),
+         trtdur_nice = paste("Days:", treatment_duration))
+#subsamp_dfs <- readRDS(file = here("data", "cleaned", "by_nucleus_subsampled.RDS"))
+wells <- readRDS(file = here("data", "cleaned", "by_nucleus_subsampled_summarized.RDS")) %>%
+  mutate(h_or_l = case_when(grepl("high", control) | 
+                              (control == "sample" & r1881 == "+R1881") ~ "+R1881",
+                            grepl("low", control) | 
+                              (control == "sample" & r1881 == "-R1881") ~ "-R1881",
+                            TRUE ~ "sample"),
+         h_or_l = factor(h_or_l, levels = c("+R1881", "-R1881")),
+         variable_nice = case_when(variable == "nuclei_number_of_spots" ~ 
+                                     "total subsampled\npuncta per well",
+                                   variable == "nuclei_ratio_hyperspeckling" ~ 
+                                     "average ratio\nhyperspeckling",
+                                   variable == "nuclei_ratio_nucleus_cell" ~ 
+                                     "average ratio\nnucleus"))
+```
+
+# General Conclusions
+
+*Y-Variable*
+
+We should use *"total subsampled puncta per well"* as our y-variable moving forward. While plate %CV's for this variable tend to be higher, they never approach the bound for unacceptable plate %CV's. Most importantly, "total subsampled puncta per well" has never produced a Z'factor lower than 0 in the 3 experiments examined here.
+
+*Control Condition*
+
+While "no treatment" was the only control condition with no Z'factors below zero, the "scramble" control condition is more biologically relevant. Moreover, it also had sufficiently high Z'factors and sufficiently low plate %cv's. "No treatment" can be thought of as the naive control, while "scramble" is a vehicle control, and more accurately mimics how our cells would behave if *only* siRNA was removed. For future conditions, we will use the "scramble" condition as our control.
+
+*Treatment Duration*
+
+We will concentrate on days 3 and 4.
+
+\newpage
+
+# Treatment Duration
+
+```{r wells_table, results = "asis"}
+trt_durs <- wells %>%
+  group_by(exp_date) %>%
+  summarize(max_trt_dur = paste(sort(unique(treatment_duration)), collapse = ", "))
+names(trt_durs) <- c("Experiment Date", "Treatment Duration")
+pandoc.table(trt_durs)
+```
+There were four experiments conducted. Treatment duration varied.
+
+Project admin decided to use day 3 or 4 moving forward.
+
+```{r day_graphs_from_ken, out.width = "40%"}
+knitr::include_graphics(here("images", "image.png"))
+knitr::include_graphics(here("images", "image (1).png"))
+```
+
+From Ken Huang: "The main reason we are choosing day 3 and 4 now is indeed due to the wide and stable high low control window and also how AR siRNA + R1881 exhibits >80% degradation in your accumulated puncta numbers/well and nuclei-cell-ration/well at that time."
+
+\newpage
+
+# Cell Count
+
+```{r ccplot, fig.width = 6, fig.height = 3, fig.align = "center"}
+ccplot <- ggplot(data = cell_counts, aes(x = as.factor(treatment_duration), y = n_cells)) +
+  facet_grid(cols = vars(exp_date)) +
+  geom_boxplot(outliers = FALSE) +
+  geom_quasirandom(aes(color = well), size = 1.5, alpha = .5) +
+  theme_bw() +
+  scale_color_viridis_d(guide = "none") +
+  xlab("Treatment Duration (Days)") +
+  ylab("Number of Cells") +
+  ggtitle("Cell Count") +
+  labs(subtitle = "Points are colored by well.") +
+  theme(text=element_text(family="serif"))
+
+ccplot
+```
+
+There does not appear to be any pattern or clustering between colors/wells, so there are no obvious positional effects.
+
+Cell count seems to vary more by experiment than treatment duration. However, only one experiment was imaged on multiple days, so we can't be sure.
+
+## Cell Count Outliers
+
+```{r cc_outliers, results = "asis"}
+#notes:
+# although you're downregulating the mrna, if you do qpcr you will detect the downregulation of the mrna
+# proteins take longer to show up in a phenotypic assay
+# should take at least 3-4 days to show up
+cc_outliers <- cell_counts %>%
+  group_by(exp_date) %>%
+  mutate(outlier_bound = quantile(n_cells, .25) - IQR(n_cells)) %>%
+  ungroup() %>%
+  filter(n_cells < outlier_bound) %>%
+  dplyr::select(exp_date, row, column, n_cells)
+names(cc_outliers) <- c("Experiment Date", "Row", "Column", "Number of\nCells")
+pandoc.table(cc_outliers, linebreaks = TRUE)
+```
+
+Low outliers were caused by wells that did not have any SPY dye. These wells were filtered out in quality control statistic calculations and other analyses.
+
+\newpage
+
+```{r subsmp, fig.height = 10, fig.width = 10, include = FALSE}
+# Subsample Plot
+
+# subsmp_plot <- ggplot(data = subsamp_dfs, aes(x = as.factor(exp_date), y = yvar, color = control)) +
+#   facet_grid(rows = vars(variable), cols = vars(ctrl_cond)) +
+#   geom_boxplot() +
+#   geom_quasirandom(size = 3, alpha = .5) +
+#   theme_bw() +
+#   scale_color_viridis_d()
+# subsmp_plot
+```
+
+# Z'Factor
+
+```{r zprime_plots, fig.height = 5, fig.width = 4, fig.align = "center", out.width = "50%"}
+for_plot <- wells %>%
+  filter(treatment_duration %in% c(3, 4)) %>%
+  filter(control != "sample") %>%
+  distinct(filepath, filename, treatment_duration, exp_date, variable_nice, ctrl_cond, .keep_all = TRUE)
+zplot <- ggplot(data = for_plot, aes(x = ctrl_cond, y = zprime)) +
+  facet_grid(rows = vars(variable_nice)) +
+  geom_boxplot(outliers = FALSE) +
+  geom_quasirandom(aes(color = as.factor(exp_date), shape = as.factor(treatment_duration)), size = 2, alpha = .5) +
+  theme_bw() +
+  scale_color_viridis_d(end = .8) +
+  labs(x = "Control Condition",
+       y = "Z'Factor",
+       title = "Z'Factors",
+       color = "Experiment",
+       shape = "Treatment\nDuration") +
+  theme(text=element_text(family="serif"))
+zplot
+```
+
+Z'factors below zero all were all from experiment 10-03, indicating that dynamic range is more impacted by experimental variables or batch effect than control condition or variable used.
+
+```{r zprime_plots_out, fig.height = 3, fig.width = 7, warning = FALSE, out.width = "80%", fig.align = "center"}
+zplot_out <- ggplot(data = for_plot, aes(x = ctrl_cond, y = zprime)) +
+  facet_grid(cols = vars(variable_nice)) +
+  geom_boxplot(outliers = FALSE) +
+  geom_quasirandom(aes(color = as.factor(exp_date), shape = as.factor(treatment_duration)), size = 3, alpha = .5) +
+  theme_bw() +
+  scale_color_viridis_d(end = .8) +
+  labs(x = "Control Condition",
+       y = "Z'Factor",
+       title = "Z'Factors",
+       color = "Experiment", 
+       shape = "Treatment\nDuration",
+       subtitle = "Outliers out of Frame.") +
+  ylim(c(-.2, 1)) +
+  theme(text=element_text(family="serif"))
+zplot_out
+```
+
+There is no obvious control condition or variable with higher Z'factors.
+
+\newpage
+
+# Plate %CV
+
+Plate %CVs are the same for every control condition, so this statistic will be used to evaluate variables.
+
+```{r cv_plots, fig.height = 4, fig.width = 5, fig.align = "center", out.width = "40%"}
+for_plot <- wells %>%
+  filter(treatment_duration %in% c(3, 4)) %>%
+  filter(control != "sample") %>%
+  distinct(filepath, filename, treatment_duration, exp_date, variable, .keep_all = TRUE)
+cvplot <- ggplot(data = for_plot, aes(x = variable_nice, y = plate_cv)) +
+  geom_boxplot(outliers = FALSE) +
+  geom_quasirandom(aes(color = as.factor(exp_date), shape = as.factor(treatment_duration)), size = 3, alpha = .5) +
+  theme_bw() +
+  scale_color_viridis_d(end = .8) +
+  labs(x = "Control Condition",
+       y = "Plate %CV",
+       title = "Plate %CVs",
+       color = "Experiment",
+       shape = "Treatment\nDuration") +
+  theme(text=element_text(family="serif"))
+cvplot
+```
+Plate %CV's were consistently higher in total subsampled puncta per well, meaning that this variable shows more variation within each condition. Looking at the plot of raw value by well (page XX), it appears that much of this variation comes from compound samples with R1881.
+
+Notably, none of the plate %CV's are over 20%, the institute's generally agreed-upon cutoff for this statistic.
+
+\newpage
+
+# Plots by Well
+
+Plots by well included for QC purposes.
+
+```{r wells, fig.height = 6, fig.width = 6, out.width = "90%", fig.align = "center"}
+for_plot <- wells %>%
+  group_by(exp_date) %>%
+  filter(treatment_duration %in% c(3, 4)) %>%
+  ungroup() %>%
+  mutate(date_dur = paste0(exp_date, ", day ", treatment_duration)) %>%
+  arrange(exp_date, treatment_duration) %>%
+  mutate(date_dur = factor(date_dur))
+
+wells_plot <- ggplot(data = for_plot, aes(x = as.factor(date_dur), y = sum_yvar, color = h_or_l)) +
+  facet_grid(rows = vars(variable_nice), cols = vars(ctrl_cond), scales = "free_y") +
+  geom_boxplot(outliers = FALSE, aes(color = h_or_l)) +
+  geom_quasirandom(size = 1.5, alpha = .5) +
+  theme_bw() +
+  # scale_color_viridis_d(start = end = .7) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  labs(title = "Control Condition and Dependent Variable",
+       y = "Dependent Variable, Summarized by Well",
+       x = "Experiment",
+       color = "R1881",
+       caption = "Max treatment duration at each date.") +
+  scale_color_manual(values= wes_palette("GrandBudapest1", n = 2)) +
+  theme(text=element_text(family="serif"))
+wells_plot
+```
+
+\newpage
+
+# Stat Ranking
+
+None of the y-variables or control conditions showed QC statistics that were below established QC cutoffs for Z'factor or plate %CV. Optimal y-variable and control condition will be chosen by Z'factor and Plate %CV ranking.
+
+```{r stats, include = FALSE}
+# ratio hyperspeckling: inside the nuclei
+# when translocation is happening
+# there's peak gfp intensities happening
+# each pixel inside the nuclei has its own intensity
+# subtracting the average intensity of the nuclei, divided by the area
+# 
+# "normalized intensity of gfp in cell"
+
+stat_ranker <- wells %>%
+  filter(treatment_duration %in% c(3, 4) & ctrl_cond != "sample") %>%
+  ungroup() %>%
+  distinct(exp_date, treatment_duration, variable_nice, ctrl_cond,
+                zprime, plate_cv) %>%
+  mutate(zprime = round(zprime, 3),
+         plate_cv = round(plate_cv, 3)) %>%
+  arrange(desc(zprime), plate_cv, treatment_duration) %>%
+  mutate(rank = row_number())
+
+variable_ranker <- stat_ranker %>%
+  group_by(variable_nice) %>%
+  summarize(stat_sum = sum(rank)) %>%
+  arrange(stat_sum)
+
+ctrl_cond_ranker <- stat_ranker %>%
+  group_by(ctrl_cond) %>%
+  summarize(stat_sum = sum(rank)) %>%
+  arrange(stat_sum)
+
+stats <- wells %>%
+  ungroup() %>%
+  filter(treatment_duration %in% c(3, 4)) %>%
+  distinct(exp_date, treatment_duration, plate_cv, control, variable, ctrl_cond,
+                zprime) %>%
+  arrange(zprime, plate_cv, control, variable, )
+# names(stats) <- c("Experiment\nDate", "Treatment\nDuration", "Plate\n%CV", "Control Condition", "Z'Factor")
+pandoc.table(stats, keep.line.breaks = TRUE)
+```
+
+## Y-Variable
+
+```{r var_rank, fig.height = 3, fig.width = 5, fig.align = "center", out.width = "40%"}
+variable_rank_plot <- ggplot(data = stat_ranker, aes(x = zprime, y = plate_cv)) +
+  geom_jitter(aes(color = variable_nice), size = 3, alpha = .5) +
+  theme_bw() +
+  scale_color_viridis_d(end = .8) +
+  labs(x = "Z'Factor",
+       y = "Plate %CV",
+       title = "QC Stat Ranker-- Variables",
+       color = "Variable") +
+  theme(text=element_text(family="serif"))
+  
+variable_rank_plot
+```
+We should use "total subsampled puncta per well" as our y-variable moving forward. While plate %CV's for this variable tend to be higher, they never approach the bound for unacceptable plate %CV's. Most importantly, "total subsampled puncta per well" has never produced a Z'factor lower than 0 in the 3 experiments examined here.
+
+I ranked all results by Z'factor then plate %CV and summarized by variable. "Total subsampled puncta per well" had the lowest rank sum.
+
+```{r tab_disp, results = "asis"}
+names(variable_ranker) <- c("Y-Variable", "Rank Sum")
+pandoc.table(variable_ranker)
+```
+\newpage
+
+## Control Condition
+
+```{r ctrl_rank, fig.height = 3, fig.width = 5, fig.align = "center", out.wdith = "40%"}
+ctrl_rank_plot <- ggplot(data = stat_ranker, aes(x = zprime, y = plate_cv)) +
+  geom_jitter(aes(color = ctrl_cond), size = 3, alpha = .5) +
+  theme_bw() +
+  scale_color_viridis_d(end = .8) +
+  labs(x = "Z'Factor",
+       y = "Plate %CV",
+       title = "QC Stat Ranker-- Control Condition",
+       color = "Control\nCondition") +
+  theme(text=element_text(family="serif"))
+  
+ctrl_rank_plot
+```
+
+"No treatment" is the only control condition with no Z'factors below zero. There does not appear to be a notable difference between control conditions in plate %CV.
+
+It is difficult to see which control condition is optimal in the above plot, but "no treatment" conditions also had the lowest rank sum.
+
+```{r ctrl_tab_disp, results = "asis"}
+names(ctrl_cond_ranker) <- c("Y-Variable", "Rank Sum")
+pandoc.table(ctrl_cond_ranker)
+```

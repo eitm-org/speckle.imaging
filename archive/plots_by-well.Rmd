@@ -1,0 +1,195 @@
+---
+title: "AR siRNA Knockdown of GFP/Puncta Count/Nuclei Number of Objects"
+author: "Abby Coleman"
+date: "`r Sys.Date()`"
+geometry: margin = 1cm
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+# devtools::install_github("jkaupp/nord")
+# # CRAN version
+# install.packages("nord")
+library(nord)
+library(here)
+library(pander)
+library(ggplot2)
+library(ggbeeswarm)
+library(tidyverse)
+library(wesanderson)
+library(kableExtra)
+library(viridis)
+source(here("functions.R"))
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+```
+
+```{r read_in_data}
+df <- readRDS(here("data", "cleaned", "by_nucleus.RDS"))
+```
+
+# General Conclusions for "2024-10-03" experiment
+
+ken: can you give us total puncta per well as an output?
+
+
+# Raw Signal by Condition for 1003
+
+```{r raw_bp_1003, fig.height = 8, fig.width = 10, warning = FALSE, results = "asis"}
+for_plot <- df %>%
+  filter(compound != "PC3 GFP-AR K22") %>%
+  filter(exp_date == "2024-10-03") %>%
+  mutate(nice_compound2 = case_when(ar_sirna_dose_ul == 0 ~ nice_compound,
+                                    TRUE ~ "siRNA Conditions")) %>%
+  ungroup()
+#list raw (unnormalized) variables to plot
+var_list <- c("average_puncta_nuc", "avg_gfp_nuc", "nuclei_number_of_objects")
+#run plot_raw_bp (defined in functions.R) to plot each raw variable by condition
+bps <- lapply(var_list, plot_raw_bp_1003, for_plot)
+```
+
+notes:
+
+* no difference in nuclei number of objects between days-- biological/technical issue
+* ken: can you give us total puncta per well as an output?
+
+\newpage
+
+```{r mystery, results = "asis", include = FALSE}
+mysteries <- for_plot %>%
+  ungroup() %>%
+  filter(nuclei_number_of_objects < 8 | average_puncta_nuc < 2 | avg_gfp_nuc > 512) %>%
+  dplyr::select(exp_date, treatment_duration, compound, row, column, average_puncta_nuc, avg_gfp_nuc, nuclei_number_of_objects)
+names(mysteries) <- c("Exp\nDate", "Treatment\nDuration", "Compound", "Row", "Column", "Avg\nPuncta", "Avg\nGFP", "Nuclei\nCount")
+pandoc.table(mysteries, caption = "Outliers", keep.line.breaks = TRUE)
+```
+
+```{r stat_tab1, results = "asis"}
+for_cv_tab <- df %>%
+  ungroup() %>%
+  filter(exp_date == "2024-10-03") %>%
+  dplyr::select(c("exp_date", "treatment_duration", names(df)[grepl("plate_cv", names(df))])) %>%
+  distinct()
+pandoc.table(for_cv_tab, caption = "Plate %CV")
+```
+
+
+```{r stat_tab2, results = "asis"}
+for_zprime_tab <- df %>% 
+  ungroup() %>%
+  filter(exp_date == "2024-10-03") %>%
+  dplyr::select(c("treatment_duration", names(df)[grepl("z_prime", names(df))])) %>%
+  dplyr::select(-c("z_prime_puncta", "z_prime_gfp", "z_prime_nuc")) %>%
+  distinct()
+names(for_zprime_tab) <- c("Treatment\nDuration", "Puncta\nReagent", "Puncta\nScramble", "Puncta\nNo Treatment", "GFP\nReagent", "GFP\nScramble", "GFP\nNo Treatment", "Nucleus Count\nReagent", "Nucleus Count\nScramble", "Nucleus Count\nNo Treatment")
+pandoc.table(for_zprime_tab, keep.line.breaks = TRUE, caption = "Z'Factor")
+
+```
+
+\newpage
+
+# General Conclusions for "2024-08-14" and "2024-09-05" experiments
+
+  * There doesn't seem to be a large enough separation between the high and low controls in the GFP output. Will have to see Z'Factor calculations to be totally sure. 
+  * $R^2$ of .547 in normalized puncta vs GFP linear model-- good but not great correlation between the two metrics. Also I don't totally trust the normalized GFP because of the control separation.
+
+
+# Raw Signal by Condition, first two experiments
+
+```{r raw_bp, fig.width = 8, warning = FALSE, results = "asis", out.width = "75%"}
+for_plot <- df %>%
+  filter(compound != "PC3 GFP-AR K22") %>%
+  filter(exp_date %in% c("2024-08-14", "2024-09-05")) %>%
+  mutate(nice_compound2 = case_when(ar_sirna_dose_ul == 0 ~ nice_compound,
+                                    TRUE ~ "siRNA Conditions"))
+#list raw (unnormalized) variables to plot
+var_list <- c("average_puncta_nuc", "avg_gfp_nuc")
+#run plot_raw_bp (defined in functions.R) to plot each raw variable by condition
+bps <- lapply(var_list, plot_raw_bp, for_plot)
+```
+
+  * Separation between high and low controls for GFP seems very small.
+  * Might want to think about using a different reagent concentration for low control? Or setting controls for each dose of reagent?
+
+\newpage
+
+# Normalized Signal by Condition
+
+```{r norm_bp, warning = FALSE, fig.width = 10, results = "asis", out.width = "75%"}
+for_plot <- df %>%
+  filter(exp_date %in% c("2024-08-14", "2024-09-05")) %>%
+  filter(compound != "PC3 GFP-AR K22") %>%
+  mutate(nice_compound2 = case_when(ar_sirna_dose_ul == 0 ~ nice_compound,
+                                    TRUE ~ "siRNA Conditions"))
+#list raw (unnormalized) variables to plot
+var_list <- c("puncta_percent_control", "gfp_percent_control")
+#run plot_raw_bp (defined in functions.R) to plot each raw variable by condition
+bps <- lapply(var_list, plot_norm_bp, for_plot)
+```
+
+Big difference between +/-R1881 in normalized puncta count, not so much in GFP.
+
+\newpage
+
+# Puncta vs GFP
+
+```{r nn_v_ctg_scatterplot, warning = FALSE, fig.width = 8}
+for_plot <- df %>%
+  filter(exp_date %in% c("2024-08-14", "2024-09-05")) %>%
+  filter(compound != "PC3 GFP-AR K22") %>%
+  filter(exp_date == "2024-08-14")
+#linear model
+linmod <- lm(gfp_percent_control ~ puncta_percent_control, data = for_plot)
+linmod_summ <- summary(linmod)
+coef <-  round(linmod_summ$coefficients[2,1], 3)
+pval <-  linmod_summ$coefficients[2,4]
+rsq <- round(linmod_summ$r.squared, 3)
+if (pval < .001) {
+  pval <- formatC(pval, format = "e", digits = 3)
+} else {
+  pval <- round(pval, 3)
+}
+#plot
+scatterplot <- ggplot(data = for_plot, aes(x = puncta_percent_control, y = gfp_percent_control, color = nice_compound_nobreak)) +
+  geom_point(aes(shape = r1881), size = 3, alpha = .5) +
+  theme_bw() +
+  ggtitle("Puncta vs GFP") +
+  xlab("Percent Control Puncta Count") +
+  ylab("Percent Control GFP") +
+  geom_smooth(color = "cornflowerblue", method = "lm") +
+  scale_color_viridis_d(name = "Condition") +
+  scale_shape_discrete(name = "R1881") +
+  xlim(c(-100, 150)) +
+  ylim(c(-100, 150)) +
+  theme(text=element_text(family="serif"))
+
+# +
+#   geom_label(aes(x = max(for_plot$puncta_percent_control, na.rm = TRUE), y = min(for_plot$gfp_percent_control, na.rm = TRUE)), label = paste("Pval:", pval), hjust = 1)
+#   geom_label(aes(x = max(for_plot$puncta_percent_control, na.rm = TRUE), y = min(for_plot$gfp_percent_control, na.rm = TRUE) + 30), label = paste("Rsq:", rsq), hjust = 1) +
+#   theme(text=element_text(family="serif")) +
+#   geom_label(aes(x = max(for_plot$puncta_percent_control, na.rm = TRUE), y = min(for_plot$gfp_percent_control, na.rm = TRUE) + 60), label = paste("Coef:", coef), hjust = 1) +
+#   xlim(c(min(for_plot$puncta_percent_control, na.rm = TRUE), max(for_plot$puncta_percent_control, na.rm = TRUE))) +
+#   ylim(c(min(for_plot$gfp_percent_control, na.rm = TRUE), max(for_plot$gfp_percent_control, na.rm = TRUE)))
+
+scatterplot
+```
+
+
+ 
+  * Weird GFP controls make their normalized values all over the place-- note differences of scale in GFP vs puncta count.
+  * Reagent doses kind of muddy any conclusions we can try and make about dose-effectiveness. Why were there so many different levels of reagents tested in these experiments?
+
+## Linear Model Coefficients:
+  * $R^2$ = `r rsq`
+  * Model coefficient = `r coef`
+  * p-value = `r pval`
+
+## Percent Control Formulas:
+
+$$
+Percent Control Puncta Count = \frac{Avg Number of Puncta Per Nucleus - Plate Average Puncta Low Control}{Plate Average Puncta High Control - Plate Average Puncta Low Control}*100
+$$
+$$
+Percent Control GFP = \frac{Average GFP Intensity Per Nucleus - Plate Average GFP Low Control}{Plate Average GFP High Control - Plate Average GFP Low Control}*100
+$$
+
+
