@@ -26,6 +26,7 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE)
 ```
 
 ```{r read_in_data}
+#these .RDS files are created by data_clean_scripts/data-clean_by-nucleus.R
 cell_counts <- readRDS(here("data", "cleaned", "cell_counts.RDS")) %>%
   mutate(well = paste(row, column),
          trtdur_nice = paste("Days:", treatment_duration))
