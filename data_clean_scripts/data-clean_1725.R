@@ -4,15 +4,15 @@ library(janitor)
 library(stringr)
 library(here)
 
-source(here("functions.R"))
+source(here("R", "functions.R"))
 
-data_path <- here("data", "unzipped")
+data_path <- here("input_data", "unzipped")
 #get list of files, but not directories
 data_files <- setdiff(list.files(data_path, full.names = TRUE, recursive = FALSE), list.dirs(data_path, full.names = TRUE, recursive = FALSE))
 #only read in the 1725 files
-data_files <- data_files[grepl("1725", data_files) & 
+data_files <- data_files[grepl("1725", data_files) &
                            #only read in excel files
-                           grepl(".xls", data_files) & 
+                           grepl(".xls", data_files) &
                            #don't try to read hidden files
                            !grepl("~", data_files)]
 dataAR <- data_files %>%
@@ -38,13 +38,13 @@ subsamp_df <- dataAR %>%
   slice_sample(n = subsample_to)
 
 bywell_df <- subsamp_df %>%
-  group_by(row, column, timepoint, compound, concentration, 
+  group_by(row, column, timepoint, compound, concentration,
            filepath, filename, exp_date, treatment_duration, exp_id) %>%
   mutate(subsamp_puncta = sum(nuclei_number_of_spots, na.rm = TRUE)) %>%
   ungroup() %>%
-  distinct(row, column, timepoint, compound, concentration, 
+  distinct(row, column, timepoint, compound, concentration,
            filepath, filename, exp_date, treatment_duration, subsamp_puncta, exp_id) %>%
-  group_by(timepoint, compound, concentration, 
+  group_by(timepoint, compound, concentration,
            filepath, filename, exp_date, treatment_duration, exp_id) %>%
   mutate(cv = sd(subsamp_puncta)/mean(subsamp_puncta)*100) %>%
   ungroup() %>%
@@ -62,7 +62,12 @@ bywell_df <- subsamp_df %>%
   ungroup() %>%
   mutate(puncta_normalized = (subsamp_puncta - avg_lctrl)/(avg_hctrl - avg_lctrl)*100)
 
-
-saveRDS(bywell_df, file = here("data", "cleaned", "by_nucleus_subsamp_1725.RDS"))
-saveRDS(cell_counts, file = here("data", "cleaned", "by_nucleus_cell_counts_1725.RDS"))
+if (!dir.exists(here("input_data", "cleaned"))) {
+  if (!dir.exists(here("input_data"))) {
+    dir.create(here("input_data"))
+  }
+  dir.create(here("input_data", "cleaned"))
+}
+saveRDS(bywell_df, file = here("input_data", "cleaned", "by_nucleus_subsamp_1725.RDS"))
+saveRDS(cell_counts, file = here("input_data", "cleaned", "by_nucleus_cell_counts_1725.RDS"))
 

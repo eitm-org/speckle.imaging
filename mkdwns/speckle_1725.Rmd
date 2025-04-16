@@ -22,14 +22,14 @@ library(paletteer)
 library(wesanderson)
 library(kableExtra)
 library(viridis)
-source(here("functions.R"))
+source(here("R", "functions.R"))
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, fig.align = "center")
 ```
 
 ```{r read_in_data}
-cell_counts <- readRDS(here("data", "cleaned", "by_nucleus_cell_counts_1725.RDS")) %>%
+cell_counts <- readRDS(here("input_data", "cleaned", "by_nucleus_cell_counts_1725.RDS")) %>%
   mutate(well = paste0(column, row))
-wells <- readRDS(file = here("data", "cleaned", "by_nucleus_subsamp_1725.RDS"))
+wells <- readRDS(file = here("input_data", "cleaned", "by_nucleus_subsamp_1725.RDS"))
 ```
 
 # General Conclusions
