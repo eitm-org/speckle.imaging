@@ -6,6 +6,12 @@ geometry: margin = 2cm
 output: 
   pdf_document:
     toc: TRUE
+    
+header-includes:
+  - \usepackage{titling}
+  - \pretitle{\begin{left}
+    \includegraphics[width=2in,height=2in]{/Users/acoleman/Documents/GitHub/speckle.imaging/images/Ellison Medical Institute Logo_Bronze.png}\LARGE\\}
+  - \posttitle{\end{left}}
 ---
 
 ```{r setup, include=FALSE}
@@ -25,6 +31,8 @@ library(viridis)
 source(here("R", "functions.R"))
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, fig.align = "center")
 ```
+
+
 
 ```{r read_in_data}
 cell_counts <- readRDS(here("input_data", "cleaned", "by_nucleus_cell_counts_1725.RDS")) %>%
