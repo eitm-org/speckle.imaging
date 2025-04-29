@@ -85,7 +85,7 @@ getDRM <- function(.x) {
   tryCatch({
     drm(puncta_normalized ~ concentration,
         data = .x,
-        fct = llogistic())
+        fct = LL.4())
     return(TRUE)
   }, error = function(e) {
     return(FALSE)

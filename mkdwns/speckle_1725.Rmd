@@ -9,9 +9,9 @@ output:
     
 header-includes:
   - \usepackage{titling}
-  - \pretitle{\begin{left}
+  - \pretitle{\begin{center}
     \includegraphics[width=2in,height=2in]{/Users/acoleman/Documents/GitHub/speckle.imaging/images/Ellison Medical Institute Logo_Bronze.png}\LARGE\\}
-  - \posttitle{\end{left}}
+  - \posttitle{\end{center}}
 ---
 
 ```{r setup, include=FALSE}

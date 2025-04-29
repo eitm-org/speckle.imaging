@@ -9,3 +9,6 @@ input_data/*
 *.docx
 *.pdf
 data/*
+*.tex
+*.log
+
