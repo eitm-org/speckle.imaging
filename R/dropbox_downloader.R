@@ -42,6 +42,6 @@ dropbox_downloader <- function(dropbox_link) {
      #unzip the file
   local_path <- here("input_data", "unzipped")
   # zip::unzip(zipfile = destination_dropbox, exdir = local_path)
-  system(paste("unzip", destination_dropbox, "-o -d", local_path))
+  system(paste("unzip", destination_dropbox, "-d", local_path))
   return(local_path)
 }

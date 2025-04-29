@@ -3,7 +3,7 @@ library(tidyverse)
 library(janitor)
 library(stringr)
 library(here)
-
+library(drc)
 source(here("R", "functions.R"))
 
 data_path <- here("input_data", "unzipped")

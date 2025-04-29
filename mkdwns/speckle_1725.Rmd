@@ -10,7 +10,7 @@ output:
 header-includes:
   - \usepackage{titling}
   - \pretitle{\begin{center}
-    \includegraphics[width=2in,height=2in]{/Users/acoleman/Documents/GitHub/speckle.imaging/images/Ellison Medical Institute Logo_Bronze.png}\LARGE\\}
+    \includegraphics[width=2in,height=2in]{/Users/cliao/Documents/GitHub/speckle.imaging/images/Ellison Medical Institute Logo_Bronze.png}\LARGE\\}
   - \posttitle{\end{center}}
 ---
 
